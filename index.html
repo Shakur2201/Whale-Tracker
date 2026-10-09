@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Whale Tracker</title>
+<meta name="description" content="Monitoraggio satellitare in tempo reale di cetacei nell'Atlantico.">
+<meta name="theme-color" content="#08161f">
+<script>
+(function(){var sa=matchMedia('(display-mode: standalone)').matches||matchMedia('(display-mode: fullscreen)').matches||navigator.standalone===true;
+var dev=false;try{dev=sessionStorage.getItem('wtDev')==='1'}catch(e){}
+document.documentElement.className=(sa||dev||location.hash==='#app')?'mode-app':'mode-store';})();
+</script>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Whale Tracker">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600&display=swap">
+<style>*{box-sizing:border-box}[hidden]{display:none!important}
+/* Layout: strumento di bordo a colonna singola su telefono, mappa + telemetria affiancate su desktop. Look unico notturno, scelto di proposito. */
+:root{
+  --abyss:#08161f; --panel:#0e2230; --line:#1c3a4d; --sea:#0f2f42;
+  --ink:#dbe7ec; --mute:#7f9aa8; --amber:#f2b450; --foam:#7fd1d8; --ok:#6fcf97;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Source Sans 3",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--abyss);color:var(--ink)}
+body{font-family:var(--body);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:14px 32px}
+.wrap{max-width:1120px;margin:0 auto;display:grid;gap:14px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.logo{width:42px;height:42px;border-radius:50%;border:1.5px solid var(--foam);display:grid;place-items:center;cursor:pointer;user-select:none;flex:none}
+.logo svg{width:26px;height:26px}
+.org{min-width:0;flex:1}
+.org b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--display);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--foam);font-weight:600}
+.sub{font-size:13px;color:var(--mute)} .sub span{color:var(--amber);font-weight:600}
+.org h1{margin:0;font-family:var(--display);font-weight:700;font-size:30px;line-height:1;text-wrap:balance}
+.live{font-family:var(--mono);font-size:12px;color:var(--ok);display:flex;align-items:center;gap:6px;border:1px solid var(--line);padding:5px 9px;border-radius:999px}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:blink 1.6s infinite}
+@keyframes blink{50%{opacity:.25}}
+.alert{background:color-mix(in srgb,var(--amber) 14%,var(--panel));border:1px solid var(--amber);padding:10px 12px;border-radius:8px;font-size:14px}
+.alert strong{color:var(--amber);font-family:var(--display);letter-spacing:.08em;text-transform:uppercase;margin-right:6px}
+.grid{display:grid;gap:14px;grid-template-columns:1fr}
+@media(min-width:880px){.grid{grid-template-columns:1.35fr 1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
+.card h2{margin:0 0 8px;font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.card h2 span{font-family:var(--mono);letter-spacing:0;text-transform:none;font-weight:400}
+.mapbox{position:relative}
+#map{width:100%;aspect-ratio:1/1;max-width:100%;display:block;border-radius:6px;background:var(--sea)}
+.zoom{position:absolute;bottom:24px;right:8px;display:flex;gap:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:rgba(8,22,31,.85)}
+.zoom button{border:0;border-radius:0;padding:6px 10px;font:600 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--mute);background:transparent;cursor:pointer}
+.zoom button[aria-pressed="true"]{background:var(--amber);color:#1a1205}
+.rp{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:10px;align-items:center;background:rgba(8,22,31,.88);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;z-index:2}
+.rp b{display:block;font-family:var(--display);font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--foam)}
+.rp span{color:var(--mute)} .rp em{font-style:normal;color:var(--amber);font-family:var(--mono)}
+.rp-dot{width:10px;height:10px;flex:none;border-radius:50%;background:var(--amber);animation:blink .8s infinite}
+.coords{display:flex;flex-wrap:wrap;gap:4px 16px;font-family:var(--mono);font-size:12px;color:var(--mute);margin-top:8px}
+.coords b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.stat{border-top:1px solid var(--line);padding-top:8px}
+.stat small{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);font-family:var(--display);font-weight:600}
+.stat b{font-family:var(--mono);font-weight:500;font-size:22px;font-variant-numeric:tabular-nums}
+.stat em{font-style:normal;font-size:12px;color:var(--mute);margin-left:3px}
+.pill{display:inline-block;font-family:var(--mono);font-size:12px;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.dive{color:var(--foam)} .surf{color:var(--amber)}
+#chart{width:100%;height:120px;display:block}
+.id{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin:0}
+.id dt{color:var(--mute)} .id dd{margin:0;font-family:var(--mono);font-size:12.5px;min-width:0;overflow-wrap:anywhere}
+.log{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
+.log li{display:grid;grid-template-columns:52px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.log time{font-family:var(--mono);font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--ok)}
+footer{font-size:12px;color:var(--mute);text-align:center}
+.sheet{position:fixed;inset:0;background:rgba(4,10,14,.75);display:grid;place-items:center;padding:16px;z-index:10}
+.sheet form{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;width:100%;max-width:400px;display:grid;gap:10px}
+.sheet h3{margin:0;font-family:var(--display);font-size:20px}
+.sheet p{margin:0;font-size:13px;color:var(--mute)}
+.sheet label{font-size:12px;color:var(--mute);display:grid;gap:4px}
+.sheet input,.sheet textarea{font:inherit;background:var(--abyss);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+.btns{display:flex;gap:8px;justify-content:flex-end}
+.btns button{font:600 14px var(--body);border-radius:6px;padding:8px 14px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.btns button.pri{background:var(--amber);color:#1a1205;border-color:var(--amber)}
+:focus-visible{outline:2px solid var(--foam);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.live i{animation:none}}
+.install-old{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--panel);border:1px solid var(--foam);border-radius:8px;padding:10px 12px;font-size:14px}
+.install span{flex:1;min-width:180px}
+.install button{font:600 14px var(--body);border-radius:6px;padding:7px 14px;border:1px solid var(--foam);background:var(--foam);color:#06202a;cursor:pointer}
+.install #installX{background:transparent;color:var(--mute);border-color:var(--line);padding:7px 10px}
+@media(display-mode:standalone){body{padding-top:calc(14px + env(safe-area-inset-top))}}
+
+/* --- modalità: pagina di installazione nel browser, tracker solo da app installata --- */
+html.mode-store .wrap,html.mode-store .sheet{display:none!important}
+html.mode-app #store{display:none!important}
+#store{max-width:520px;margin:0 auto;display:grid;gap:22px;padding-block:18px 8px}
+.st-head{display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:center}
+.st-head img{width:96px;height:96px;border-radius:22px;box-shadow:0 6px 24px rgba(0,0,0,.45);cursor:default;user-select:none;-webkit-user-select:none}
+.st-head h1{margin:0;font-family:var(--display);font-weight:700;font-size:34px;line-height:1}
+.st-head p{margin:4px 0 0;color:var(--foam);font-size:14px}
+.st-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));text-align:center;border-block:1px solid var(--line);padding-block:12px}
+.st-meta div+div{border-left:1px solid var(--line)}
+.st-meta b{display:block;font-family:var(--mono);font-weight:500;font-size:16px}
+.st-meta small{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-family:var(--display);font-weight:600}
+#getBtn{width:100%;font:700 18px var(--display);letter-spacing:.06em;text-transform:uppercase;padding:14px;border-radius:12px;border:0;background:var(--amber);color:#1a1205;cursor:pointer}
+#getBtn:disabled{opacity:.6;cursor:default}
+.howto{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.howto h2{margin:0 0 8px;font-family:var(--display);font-size:14px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.howto ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.howto svg{width:18px;height:18px;vertical-align:-3px;stroke:var(--foam)}
+.shots{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.shot{aspect-ratio:9/16;border-radius:12px;border:1px solid var(--line);background:var(--panel);overflow:hidden;position:relative}
+.shot canvas{width:100%;height:100%;display:block}
+.desc h2{margin:0 0 6px;font-family:var(--display);font-size:20px}
+.desc p{margin:0 0 10px;color:var(--ink);max-width:62ch}
+.desc ul{margin:0;padding-left:18px;color:var(--mute);display:grid;gap:4px}
+.st-foot{font-size:12px;color:var(--mute);text-align:center}
+#done{color:var(--ok);text-align:center;font-weight:600}
+</style>
+</head>
+<body>
+
+
+<section id="store" aria-label="Installa Whale Tracker">
+  <div class="st-head">
+    <img id="stIcon" src="icons/icon-192.png" alt="Icona Whale Tracker" draggable="false">
+    <div><h1>Whale Tracker</h1><p>Telemetria satellitare cetacei · Atlantico</p></div>
+  </div>
+  <div class="st-meta">
+    <div><b>1.4.2</b><small>Versione</small></div>
+    <div><b>2,1 MB</b><small>Dimensione</small></div>
+    <div><b>4+</b><small>Età</small></div>
+  </div>
+  <button type="button" id="getBtn">Installa</button>
+  <p id="done" hidden>Installazione avviata. Apri Whale Tracker dalla schermata Home.</p>
+  <div class="howto" id="howIos" hidden>
+    <h2>Installa su iPhone</h2>
+    <ol><li>Apri questa pagina con <b>Safari</b>.</li><li>Tocca <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 11v9h14v-9"/></svg> <b>Condividi</b> nella barra in basso.</li><li>Scegli <b>Aggiungi alla schermata Home</b> e poi <b>Aggiungi</b>.</li><li>Apri Whale Tracker dalla schermata Home.</li></ol>
+  </div>
+  <div class="howto" id="howAndroid" hidden>
+    <h2>Installa su Android</h2>
+    <ol><li>Apri questa pagina con <b>Chrome</b>.</li><li>Tocca il menu <b>⋮</b> in alto a destra.</li><li>Scegli <b>Installa app</b> (o <b>Aggiungi a schermata Home</b>).</li><li>Apri Whale Tracker dalla schermata Home.</li></ol>
+  </div>
+  <div class="shots" aria-hidden="true"><div class="shot"><canvas data-s="0"></canvas></div><div class="shot"><canvas data-s="1"></canvas></div><div class="shot"><canvas data-s="2"></canvas></div></div>
+  <div class="desc">
+    <h2>Informazioni</h2>
+    <p>Segui in tempo reale i grandi cetacei marcati con tag satellitari nell'Atlantico settentrionale. Posizione, rotta, profondità di immersione e battito cardiaco aggiornati ogni pochi secondi.</p>
+    <ul><li>Mappa live con traccia degli ultimi 7 giorni</li><li>Profilo d'immersione e telemetria del tag</li><li>Registro eventi: emersioni, alimentazione, vocalizzazioni</li><li>Funziona anche con connessione debole</li></ul>
+  </div>
+  <p class="st-foot">Whale Tracker · Programma di telemetria cetacei dell'Atlantico</p>
+</section>
+
+<div class="wrap">
+  <header>
+    <div class="logo" id="logo" title="Whale Tracker" role="img" aria-label="Logo Whale Tracker">
+      <svg viewBox="0 0 32 32"><path d="M16 13.2C17.5 11.5 21 9 28 6.5 27.5 10.5 24 14 18.6 15.4 17.6 17.5 17.4 20 17.6 23H14.4C14.6 20 14.4 17.5 13.4 15.4 8 14 4.5 10.5 4 6.5 11 9 14.5 11.5 16 13.2Z" fill="#f2b450"/><path d="M7 24.5c3-1.6 6 1.6 9 0s6 1.6 9 0" stroke="#7fd1d8" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>
+    </div>
+    <div class="org">
+      <b>Telemetria satellitare cetacei · Atlantico</b>
+      <h1>Whale Tracker</h1>
+      <div class="sub">Esemplare monitorato: <span id="title">Silvia</span></div>
+    </div>
+    <div class="live"><i></i><span id="clock">--:--:--</span></div>
+  </header>
+
+
+  <div class="alert" id="alert" hidden><strong>Avviso</strong><span id="alertText"></span></div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Posizione in tempo reale <span id="fix">fix --</span></h2>
+      <div class="mapbox">
+        <div class="rp" id="rp" hidden><span class="rp-dot"></span><div><b>Aggiornamento posizione satellitare</b><span>Spostamento <em id="rpKm">0 km</em> · <span id="rpSince"></span></span></div></div>
+        <canvas id="map" aria-label="Mappa dell'Atlantico con la posizione dell'esemplare"></canvas>
+        <div class="zoom" role="group" aria-label="Scala mappa">
+          <button type="button" data-z="3000">Oceano</button>
+          <button type="button" data-z="300" aria-pressed="true">Regione</button>
+          <button type="button" data-z="3">Ravvicinata</button>
+        </div>
+      </div>
+      <div class="coords">
+        <span>LAT <b id="lat">--</b></span><span>LON <b id="lon">--</b></span>
+        <span>Rotta <b id="hdg">--</b></span><span>Percorso 24 h <b id="dist">--</b></span><span>Zona <b id="zone">--</b></span>
+      </div>
+    </section>
+
+    <div style="display:grid;gap:14px;min-width:0">
+      <section class="card">
+        <h2>Telemetria <span id="state" class="pill dive">--</span></h2>
+        <div class="stats">
+          <div class="stat"><small>Profondità</small><b id="depth">--</b><em>m</em></div>
+          <div class="stat"><small>Frequenza cardiaca</small><b id="hr">--</b><em>bpm</em></div>
+          <div class="stat"><small>Velocità</small><b id="spd">--</b><em>nodi</em></div>
+          <div class="stat"><small>Temp. acqua</small><b id="temp">--</b><em>°C</em></div>
+          <div class="stat"><small>Ultima emersione</small><b id="surf">--</b></div>
+          <div class="stat"><small>Batteria tag</small><b id="bat">--</b><em>%</em><div class="bar"><i id="batbar"></i></div></div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Profilo d'immersione <span>ultimi 60 min</span></h2>
+        <canvas id="chart"></canvas>
+      </section>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Registro eventi <span>aggiornamento automatico</span></h2>
+      <ul class="log" id="log"></ul>
+    </section>
+    <section class="card">
+      <h2>Scheda esemplare</h2>
+      <dl class="id">
+        <dt>Nome</dt><dd id="nm">Silvia</dd>
+        <dt>Specie</dt><dd>Balaenoptera musculus (balenottera azzurra)</dd>
+        <dt>Sesso</dt><dd>Femmina adulta</dd>
+        <dt>Lunghezza stimata</dt><dd>24,8 m</dd>
+        <dt>Peso stimato</dt><dd>~110 t</dd>
+        <dt>Tag</dt><dd>ATL-BW-0417 · SPLASH-10 Fastloc</dd>
+        <dt>Applicato il</dt><dd>22/04/2026 · al largo di São Miguel</dd>
+        <dt>Trasmissione</dt><dd>Argos + GPS Fastloc, aggiornamento continuo</dd>
+        <dt>Area</dt><dd>Atlantico settentrionale · rotta migratoria Azzorre – Canarie – dorsale medio-atlantica</dd>
+      </dl>
+    </section>
+  </div>
+
+  <footer>Whale Tracker · Dati in tempo reale soggetti a validazione · Errore di posizione stimato ±150 m</footer>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <form id="cfg">
+    <h3>Impostazioni nascoste</h3>
+    <p>Visibili solo dopo 5 tocchi sul logo. Salvate su questo dispositivo.</p>
+    <label for="cfgName">Nome della balena<input id="cfgName" maxlength="24"></label>
+    <label for="cfgAlert">Avviso in evidenza (vuoto = nessuno)<textarea id="cfgAlert" rows="3" maxlength="200"></textarea></label>
+    <div class="btns"><button type="button" id="cfgClose">Chiudi</button><button class="pri" type="submit">Salva</button></div>
+  </form>
+</div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let NAME=store.get('silviaName')||'Silvia';
+let ALERT=store.get('silviaAlert')||'';
+let ZOOM=300; // larghezza mappa in km
+// --- riproduzione dello spostamento a ogni apertura ---
+let RP=null;
+const CAM={lon:null,lat:null};let VIEW=null;
+const easeIO=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+function lastSeen(){try{return +localStorage.getItem('wtLast')||0}catch(e){return 0}}
+function markSeen(){try{localStorage.setItem('wtLast',String(Date.now()))}catch(e){}}
+
+// --- isole Azzorre (lon, lat) ---
+const ISLANDS=[
+ ['São Miguel',[[-25.86,37.86],[-25.6,37.83],[-25.45,37.84],[-25.2,37.85],[-25.13,37.8],[-25.18,37.74],[-25.45,37.71],[-25.65,37.74],[-25.85,37.8]]],
+ ['Santa Maria',[[-25.18,37.01],[-25.04,37.0],[-25.02,36.93],[-25.1,36.92],[-25.18,36.96]]],
+ ['Terceira',[[-27.38,38.73],[-27.2,38.8],[-27.05,38.75],[-27.04,38.66],[-27.2,38.64],[-27.36,38.67]]],
+ ['Graciosa',[[-28.07,39.08],[-27.95,39.08],[-27.95,39.0],[-28.03,39.0]]],
+ ['São Jorge',[[-28.32,38.65],[-28.0,38.75],[-27.76,38.6],[-27.78,38.56],[-28.05,38.64],[-28.3,38.58]]],
+ ['Pico',[[-28.55,38.53],[-28.3,38.56],[-28.03,38.45],[-28.1,38.4],[-28.4,38.41],[-28.55,38.47]]],
+ ['Faial',[[-28.83,38.6],[-28.72,38.64],[-28.6,38.58],[-28.68,38.52],[-28.8,38.53]]],
+ ['Flores',[[-31.27,39.52],[-31.14,39.5],[-31.13,39.38],[-31.2,39.37],[-31.27,39.44]]],
+ ['Madeira',[[-17.27,32.8],[-17.0,32.87],[-16.7,32.75],[-16.9,32.64],[-17.2,32.7]]],
+ ['Porto Santo',[[-16.4,33.1],[-16.28,33.1],[-16.3,33.03],[-16.38,33.03]]],
+ ['La Palma',[[-17.95,28.85],[-17.75,28.85],[-17.8,28.5],[-17.9,28.55]]],
+ ['Tenerife',[[-16.9,28.38],[-16.3,28.58],[-16.15,28.55],[-16.5,28.1],[-16.85,28.2]]],
+ ['Gran Canaria',[[-15.8,28.15],[-15.4,28.15],[-15.4,27.8],[-15.6,27.75],[-15.82,27.95]]],
+ ['Fuerteventura',[[-14.0,28.75],[-13.85,28.72],[-14.2,28.2],[-14.5,28.05],[-14.2,28.4]]],
+ ['Lanzarote',[[-13.85,29.2],[-13.45,29.2],[-13.5,28.85],[-13.85,28.95]]],
+ ['El Hierro',[[-18.15,27.8],[-17.9,27.82],[-17.95,27.65],[-18.1,27.7]]],
+ ['La Gomera',[[-17.35,28.2],[-17.1,28.18],[-17.15,28.02],[-17.32,28.05]]],
+ ['Corvo',[[-31.12,39.72],[-31.08,39.72],[-31.08,39.67],[-31.12,39.67]]]
+];
+
+const MAIN=[[-9.3,43.5],[-8.9,42.2],[-8.8,41],[-9.5,38.7],[-8.9,37],[-6.3,36.6],[-5.9,35.8],[-6.8,34],[-9.6,30.5],[-11.2,28.5],[-13,27.5],[-14.6,26],[-16.1,23.9],[-17,21],[0,21],[0,44]];
+// --- modello deterministico: tutti vedono la stessa posizione nello stesso istante ---
+const TAU=Math.PI*2, H=ms=>ms/3600000;
+// rotta migratoria chiusa in mare aperto, percorsa a ~8-9 km/h: Silvia cambia zona di continuo
+const WP=[[-27,37.9],[-25.8,36.2],[-21.5,34.5],[-21,31.2],[-23,28.2],[-27.5,29.5],[-33,32.5],[-37.5,36.5],[-36,40.8],[-31,43],[-26.5,41.6],[-26,39.6],[-26.4,38.3]];
+const PTS=[],CUM=[0];
+(()=>{const n=WP.length;for(let i=0;i<n;i++){const p0=WP[(i-1+n)%n],p1=WP[i],p2=WP[(i+1)%n],p3=WP[(i+2)%n];
+  for(let k=0;k<80;k++){const t=k/80,t2=t*t,t3=t2*t,f=(a,b,c,d)=>.5*(2*b+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3);PTS.push([f(p0[0],p1[0],p2[0],p3[0]),f(p0[1],p1[1],p2[1],p3[1])])}}
+  PTS.push(PTS[0]);for(let i=1;i<PTS.length;i++){const[a,b]=PTS[i-1],[c,d]=PTS[i];CUM.push(CUM[i-1]+Math.hypot((c-a)*111*Math.cos((b+d)/2*Math.PI/180),(d-b)*111))}})();
+const TOT=CUM[CUM.length-1];
+function along(s){s=((s%TOT)+TOT)%TOT;let lo=0,hi=CUM.length-1;while(hi-lo>1){const m=(lo+hi)>>1;CUM[m]<=s?lo=m:hi=m}
+  const f=(s-CUM[lo])/(CUM[hi]-CUM[lo]),[a,b]=PTS[lo],[c,d]=PTS[hi];return{lon:a+(c-a)*f,lat:b+(d-b)*f,tx:(c-a)*Math.cos(b*Math.PI/180),ty:d-b}}
+let DOFF=0;try{DOFF=+localStorage.getItem('wtD')||0}catch(e){}
+let CURD=DOFF;
+function pos(ms,dd=CURD){const t=H(ms),q=along(11*t+dd+45*Math.sin(t*TAU/37)+12*Math.sin(t*TAU/9.5));
+  const L=Math.hypot(q.tx,q.ty)||1,nx=-q.ty/L,ny=q.tx/L;
+  const off=(6*Math.sin(t*TAU/5.3)+2*Math.sin(t*TAU/1.3)+.35*Math.sin(t*TAU/.15)+.12*Math.sin(t*TAU/.04))/111;
+  return{lon:q.lon+nx*off/Math.cos(q.lat*Math.PI/180),lat:q.lat+ny*off}}
+const AREAS=[['Azzorre',-27,38.3],['Madeira',-17,32.7],['Canarie',-16,28.3],['Atlantico centrale',-21,32],['Bacino delle Canarie',-24,29],['Mare dei Sargassi (margine est)',-34,32],['Dorsale medio-atlantica',-37,37.5],['Atlantico nord',-33,42],['Nord delle Azzorre',-26.5,41]];
+function zone(p){let best,bd=1e9;AREAS.forEach(([n,a,b])=>{const d=km(p,{lon:a,lat:b});if(d<bd){bd=d;best=n}});return best}
+const CYC=14*60000, DIVE=11*60000;
+const hash=n=>{const x=Math.sin(n*127.1+311.7)*43758.5453;return x-Math.floor(x)};
+const maxDepth=c=>Math.round(120+hash(c)*200);
+function depth(ms){const c=Math.floor(ms/CYC),p=ms-c*CYC;if(p>=DIVE)return 0;return maxDepth(c)*Math.pow(Math.sin(Math.PI*p/DIVE),0.7)}
+function hr(ms){const d=depth(ms);return d<2?32+Math.round(4*Math.sin(ms/7000)):Math.round(6+5*(1-d/320)+Math.sin(ms/9000))}
+function km(a,b){const dl=(b.lat-a.lat)*Math.PI/180,dn=(b.lon-a.lon)*Math.PI/180,m=(a.lat+b.lat)/2*Math.PI/180;return 6371*Math.hypot(dl,dn*Math.cos(m))}
+const fmtT=ms=>new Date(ms).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+const dms=(v,p,n)=>{const s=v<0?n:p;v=Math.abs(v);const d=Math.floor(v),m=(v-d)*60;return d+'°'+m.toFixed(3).padStart(6,'0')+"' "+s};
+
+function sizeCanvas(c,ctx){const r=c.getBoundingClientRect(),d=window.devicePixelRatio||1;const W=Math.round(r.width*d),Hh=Math.round(r.height*d);if(c.width!==W||c.height!==Hh){c.width=W;c.height=Hh}ctx.setTransform(d,0,0,d,0,0);return{w:r.width,h:r.height}}
+
+// --- mappa ---
+const map=$('map'),mc=map.getContext('2d');let V;
+const P=(lon,lat)=>[V.cx+(lon-V.lon)*V.s*V.k,V.cy-(lat-V.lat)*V.s];
+function drawMap(real){
+  let now=real,target;
+  if(RP){const f=Math.min(1,(real-RP.start)/RP.dur),e=easeIO(f);now=RP.from+(RP.to-RP.from)*e+(real-RP.start);CURD=RP.d0+(RP.d1-RP.d0)*e;
+    target=RP.view;
+    if(f>=1&&real-RP.start>RP.dur+900){VIEW=RP.view;RP=null;CURD=DOFF;$('rp').hidden=true}
+    else{$('rpKm').textContent=km(pos(RP.from,RP.d0),pos(now)).toFixed(1)+' km'}}
+  const{w,h}=sizeCanvas(map,mc),p=pos(now);
+  if(!RP){if(VIEW&&km(VIEW,p)>ZOOM*.3)VIEW={lon:p.lon,lat:p.lat};target=VIEW||{lon:p.lon,lat:p.lat}}
+  if(CAM.lon===null){CAM.lon=target.lon;CAM.lat=target.lat}
+  CAM.lon+=(target.lon-CAM.lon)*.08;CAM.lat+=(target.lat-CAM.lat)*.08;
+  V={lon:CAM.lon,lat:CAM.lat,cx:w/2,cy:h/2,k:Math.cos(p.lat*Math.PI/180),s:w*111/ZOOM};
+  const g=mc.createRadialGradient(w*.45,h*.55,10,w/2,h/2,w*.8);g.addColorStop(0,'#123a52');g.addColorStop(1,'#0a2030');mc.fillStyle=g;mc.fillRect(0,0,w,h);
+  // isobate stilizzate della dorsale
+  mc.setLineDash([2,4]);mc.lineWidth=1;mc.font='10px "IBM Plex Mono",monospace';
+  [[2.2,'3000 m'],[1.5,'2000 m'],[0.9,'1000 m']].forEach(([r,l])=>{mc.strokeStyle='rgba(127,209,216,.18)';mc.beginPath();
+    for(let a=0;a<=TAU+.01;a+=.04){const[x,y]=P(-27.6+r*2.1*Math.cos(a)*(1+.1*Math.sin(3*a)),38.35+r*.8*Math.sin(a)*(1+.1*Math.cos(2*a)));a?mc.lineTo(x,y):mc.moveTo(x,y)}
+    mc.stroke();const[lx,ly]=P(-27.6,38.35-r*.8);mc.fillStyle='rgba(127,209,216,.45)';mc.fillText(l,lx+3,ly-3)});
+  mc.setLineDash([]);
+  // reticolo
+  const step=nice(ZOOM/111/4),dec=step>=1?0:step>=.1?1:step>=.01?2:3,stepL=nice(ZOOM/111/V.k/2.6),decL=stepL>=1?0:stepL>=.1?1:stepL>=.01?2:3;
+  mc.strokeStyle='rgba(219,231,236,.07)';mc.fillStyle='rgba(219,231,236,.4)';
+  const lonA=V.lon-ZOOM/111/V.k,lonB=V.lon+ZOOM/111/V.k,latA=V.lat-ZOOM/111,latB=V.lat+ZOOM/111;
+  for(let lo=Math.ceil(lonA/stepL)*stepL;lo<lonB;lo+=stepL){const[x]=P(lo,0);mc.beginPath();mc.moveTo(x,0);mc.lineTo(x,h);mc.stroke();mc.fillText(Math.abs(lo).toFixed(decL)+'°W',x+3,h-6)}
+  for(let la=Math.ceil(latA/step)*step;la<latB;la+=step){const[,y]=P(V.lon,la);mc.beginPath();mc.moveTo(0,y);mc.lineTo(w,y);mc.stroke();mc.fillText(la.toFixed(dec)+'°N',4,y-3)}
+  // isole
+  ISLANDS.forEach(([n,q])=>{mc.beginPath();q.forEach(([a,b],i)=>{const[x,y]=P(a,b);i?mc.lineTo(x,y):mc.moveTo(x,y)});mc.closePath();mc.fillStyle='#22302f';mc.fill();mc.strokeStyle='#4a6461';mc.lineWidth=1;mc.stroke();
+    const c=q.reduce((s,[a,b])=>[s[0]+a/q.length,s[1]+b/q.length],[0,0]);const[x,y]=P(c[0],c[1]);mc.fillStyle='#a9bec8';mc.font='600 12px "Barlow Condensed",sans-serif';mc.fillText(n.toUpperCase(),x+8,y-8)});
+  if(ZOOM>500){const[x,y]=P(-31,34);mc.fillStyle='rgba(169,190,200,.6)';mc.font='600 13px "Barlow Condensed",sans-serif';mc.fillText('OCEANO ATLANTICO',x,y)}
+  // terraferma (Penisola iberica e Africa)
+  mc.beginPath();MAIN.forEach(([a,b],i)=>{const[x,y]=P(a,b);i?mc.lineTo(x,y):mc.moveTo(x,y)});mc.closePath();mc.fillStyle='#22302f';mc.fill();mc.strokeStyle='#4a6461';mc.stroke();
+  // rotta degli ultimi 7 giorni
+  if(ZOOM>500){mc.setLineDash([3,4]);mc.strokeStyle='rgba(242,180,80,.35)';mc.lineWidth=1.2;mc.beginPath();for(let i=168;i>=0;i--){const pt=P(...Object.values(pos(now-i*3600000)));i===168?mc.moveTo(...pt):mc.lineTo(...pt)}mc.stroke();mc.setLineDash([])}
+  // traccia: 24 h ogni 5 min + ultimi 20 min ogni 5 s
+  mc.lineWidth=2;let prev=null;
+  const TS=ZOOM<40?20000:300000,TN=ZOOM<40?540:288,TE=ZOOM<40?60:4;
+  for(let i=TN;i>=TE;i--){const q=pos(now-i*TS),pt=P(q.lon,q.lat);
+    if(prev){mc.strokeStyle=`rgba(242,180,80,${.08+.7*(1-i/TN)})`;mc.beginPath();mc.moveTo(...prev);mc.lineTo(...pt);mc.stroke()}
+    if(TS===300000&&i%24===0&&i&&ZOOM<1500){mc.fillStyle='rgba(242,180,80,.55)';mc.beginPath();mc.arc(pt[0],pt[1],2,0,TAU);mc.fill()}prev=pt}
+  prev=null;for(let i=240;i>=0;i--){const pt=P(...Object.values(pos(now-i*5000)));if(prev){mc.strokeStyle=`rgba(242,180,80,${.2+.8*(1-i/240)})`;mc.beginPath();mc.moveTo(...prev);mc.lineTo(...pt);mc.stroke()}prev=pt}
+  if(RP){const a=pos(RP.from,RP.d0),[gx,gy]=P(a.lon,a.lat);mc.setLineDash([4,4]);mc.strokeStyle='rgba(219,231,236,.7)';mc.lineWidth=1.5;mc.beginPath();mc.arc(gx,gy,7,0,TAU);mc.stroke();mc.setLineDash([]);
+    mc.fillStyle='rgba(219,231,236,.75)';mc.font='10px "IBM Plex Mono",monospace';mc.fillText('ultima posizione vista',gx+10,gy+14);
+    mc.strokeStyle='#f2b450';mc.lineWidth=3;mc.beginPath();const N=120;for(let i=0;i<=N;i++){const q=pos(RP.from+(now-RP.from)*i/N,RP.d0+(CURD-RP.d0)*i/N),pt=P(q.lon,q.lat);i?mc.lineTo(...pt):mc.moveTo(...pt)}mc.stroke()}
+  // marker con direzione
+  const p2=pos(now-20000),ang=Math.atan2(-(p.lat-p2.lat),(p.lon-p2.lon)*V.k),[x,y]=P(p.lon,p.lat),pulse=(now/1600)%1;
+  mc.strokeStyle=`rgba(242,180,80,${1-pulse})`;mc.lineWidth=2;mc.beginPath();mc.arc(x,y,7+pulse*24,0,TAU);mc.stroke();
+  mc.save();mc.translate(x,y);mc.rotate(ang);mc.fillStyle='#f2b450';mc.beginPath();mc.moveTo(12,0);mc.lineTo(-7,-7);mc.lineTo(-3,0);mc.lineTo(-7,7);mc.closePath();mc.fill();mc.strokeStyle='#08161f';mc.lineWidth=1.5;mc.stroke();mc.restore();
+  mc.font='700 15px "Barlow Condensed",sans-serif';mc.fillStyle='#f2b450';{const lw=mc.measureText(NAME.toUpperCase()).width;mc.fillText(NAME.toUpperCase(),x+14+lw>w-6?x-14-lw:x+14,y-10)}
+  // scala
+  const sk=nice(ZOOM/5),px=sk/111*V.s;mc.strokeStyle='#dbe7ec';mc.lineWidth=1.5;mc.beginPath();mc.moveTo(w-14-px,18);mc.lineTo(w-14,18);mc.moveTo(w-14-px,14);mc.lineTo(w-14-px,22);mc.moveTo(w-14,14);mc.lineTo(w-14,22);mc.stroke();
+  mc.fillStyle='#dbe7ec';mc.font='10px "IBM Plex Mono",monospace';mc.fillText(sk+' km',w-14-px,34);
+}
+
+// --- grafico profondità ---
+const ch=$('chart'),cc=ch.getContext('2d');
+function drawChart(now){
+  const{w,h}=sizeCanvas(ch,cc);cc.clearRect(0,0,w,h);const L=34,R=6,T=6,Bt=16,Dm=350;
+  cc.font='10px "IBM Plex Mono",monospace';cc.fillStyle='#7f9aa8';cc.strokeStyle='rgba(219,231,236,.08)';
+  [0,100,200,300].forEach(d=>{const y=T+(h-T-Bt)*d/Dm;cc.beginPath();cc.moveTo(L,y);cc.lineTo(w-R,y);cc.stroke();cc.fillText(d+'',4,y+3)});
+  ['-60 min','-30 min','ora'].forEach((l,i)=>{const x=L+(w-L-R)*i/2;cc.fillText(l,Math.min(x,w-R-22),h-3)});
+  cc.beginPath();const N=240;for(let i=0;i<=N;i++){const x=L+(w-L-R)*i/N,y=T+(h-T-Bt)*depth(now-3600000+3600000*i/N)/Dm;i?cc.lineTo(x,y):cc.moveTo(x,y)}
+  cc.strokeStyle='#7fd1d8';cc.lineWidth=1.6;cc.stroke();cc.lineTo(w-R,T);cc.lineTo(L,T);cc.closePath();cc.fillStyle='rgba(127,209,216,.12)';cc.fill();
+  const y=T+(h-T-Bt)*depth(now)/Dm;cc.fillStyle='#f2b450';cc.beginPath();cc.arc(w-R,y,3.5,0,TAU);cc.fill();
+}
+
+// --- registro ---
+function buildLog(now){
+  const ev=[],c0=Math.floor(now/CYC);
+  for(let c=c0;c>c0-7;c--){const st=c*CYC;
+    if(st+DIVE<now)ev.push([st+DIVE,`Emersione · ${3+Math.floor(hash(c+9)*4)} soffi registrati dal tag`]);
+    if(st<now)ev.push([st,`Inizio immersione · profondità massima ${maxDepth(c)} m`]);
+    if(hash(c+3)>.5&&st+5*60000<now)ev.push([st+5*60000,`Fix Argos classe ${hash(c+4)>.5?'2':'3'} · errore stimato ${Math.round(150+hash(c+5)*300)} m`]);
+    if(hash(c+7)>.7&&st+6*60000<now)ev.push([st+6*60000,'Alimentazione rilevata · scatti in accelerazione compatibili con krill']);
+    if(hash(c+8)>.8&&st+DIVE+60000<now)ev.push([st+DIVE+60000,'Vocalizzazione a bassa frequenza captata dall\'idrofono di boa']);
+  }
+  for(let k=1;k<=6;k++){const t=Math.floor(now/7200000)*7200000-(k-1)*7200000;ev.push([t,`Spostamento · ${km(pos(t-7200000),pos(t)).toFixed(1)} km nelle ultime 2 h, zona: ${zone(pos(t))}`])}
+  ev.sort((a,b)=>b[0]-a[0]);
+  $('log').innerHTML=ev.slice(0,12).map(([t,s])=>`<li><time>${fmtT(t)}</time><span>${s}</span></li>`).join('');
+}
+
+// --- aggiornamento dati (1 s) e animazione mappa ---
+let lastLog=0;
+function tick(){
+  const now=Date.now(),p=pos(now),p2=pos(now-60000),d=depth(now);
+  const spd=km(p2,p)*60/1.852,hd=(Math.atan2((p.lon-p2.lon)*Math.cos(p.lat*Math.PI/180),p.lat-p2.lat)*180/Math.PI+360)%360;
+  let dist=0;for(let i=1;i<=288;i++)dist+=km(pos(now-i*300000),pos(now-(i-1)*300000));
+  $('clock').textContent='LIVE '+new Date(now).toLocaleTimeString('it-IT');
+  $('lat').textContent=dms(p.lat,'N','S');$('lon').textContent=dms(p.lon,'E','W');
+  $('hdg').textContent=Math.round(hd)+'°';$('dist').textContent=dist.toFixed(0)+' km';$('zone').textContent=zone(p);
+  $('depth').textContent=d.toFixed(0);$('hr').textContent=hr(now);$('spd').textContent=spd.toFixed(1);
+  const sst=24.5-(p.lat-28)*.55;$('temp').textContent=(d<2?sst:Math.max(13.5,sst-d*.05)).toFixed(1);
+  const st=$('state');if(d<2){st.textContent='in superficie';st.className='pill surf'}else{st.textContent='in immersione';st.className='pill dive'}
+  $('surf').textContent=d<2?'ora':Math.round((now-Math.floor(now/CYC)*CYC)/60000)+' min fa';
+  const bat=Math.max(38,Math.round(81-(now-Date.UTC(2026,3,22))/86400000*.2));$('bat').textContent=bat;$('batbar').style.width=bat+'%';
+  const fa=Math.floor((now/1000)%240);$('fix').textContent='fix '+(fa<60?fa+' s':Math.floor(fa/60)+' min')+' fa';
+  drawChart(now);if(now-lastLog>20000){buildLog(now);lastLog=now}
+}
+function nice(v){const e=Math.pow(10,Math.floor(Math.log10(v))),m=v/e;return (m<1.5?1:m<3.5?2:m<7.5?5:10)*e}
+function startReplay(){
+  const now=Date.now(),last=lastSeen(),ok=last&&now-last>45000;
+  let from=ok?last:now-(last?20*60000:6*3600000);
+  from=Math.max(from,now-3*86400000);
+  const d0=DOFF;DOFF+=18+Math.random()*42;try{localStorage.setItem('wtD',String(DOFF))}catch(e){}
+  const a=pos(from,d0),b=pos(now,DOFF),d=km(a,b);
+  ZOOM=Math.min(3000,Math.max(40,d*(2.3+Math.random()*.9)));
+  // inquadratura diversa a ogni apertura: centro spostato a caso
+  const j=ZOOM/111*(.06+Math.random()*.14),ang=Math.random()*TAU,kk=Math.cos(b.lat*Math.PI/180);
+  const view={lon:(a.lon+b.lon)/2+Math.cos(ang)*j/kk,lat:(a.lat+b.lat)/2+Math.sin(ang)*j};
+  document.querySelectorAll('.zoom button').forEach(x=>x.setAttribute('aria-pressed','false'));
+  CAM.lon=null;VIEW=null;RP={from,to:now,start:now,dur:4200,d0,d1:DOFF,view};
+  const gap=now-from,hh=Math.floor(gap/3600000),mm=Math.round(gap%3600000/60000);
+  $('rpSince').textContent=(ok?'dall\'ultima visita, ':'ultime ')+(hh?hh+' h ':'')+(mm||!hh?mm+' min':'')+(ok?' fa':'');
+  $('rp').hidden=false;markSeen();
+}
+document.addEventListener('visibilitychange',()=>{if(document.documentElement.className!=='mode-app')return;if(document.visibilityState==='visible')startReplay();else markSeen()});
+addEventListener('pagehide',markSeen);setInterval(()=>{if(!RP)markSeen()},15000);
+function frame(){drawMap(Date.now());requestAnimationFrame(frame)}
+
+function applyCfg(){$('title').textContent=NAME;$('nm').textContent=NAME;$('alert').hidden=!ALERT;$('alertText').textContent=ALERT}
+document.querySelectorAll('.zoom button').forEach(b=>b.onclick=()=>{ZOOM=+b.dataset.z;document.querySelectorAll('.zoom button').forEach(x=>x.setAttribute('aria-pressed',x===b))});
+let taps=0,tt;
+$('logo').addEventListener('click',()=>{taps++;clearTimeout(tt);tt=setTimeout(()=>taps=0,1500);if(taps>=5){taps=0;$('cfgName').value=NAME;$('cfgAlert').value=ALERT;$('sheet').hidden=false}});
+$('cfgClose').onclick=()=>$('sheet').hidden=true;
+$('cfg').addEventListener('submit',e=>{e.preventDefault();NAME=$('cfgName').value.trim()||'Silvia';ALERT=$('cfgAlert').value.trim();store.set('silviaName',NAME);store.set('silviaAlert',ALERT);applyCfg();$('sheet').hidden=true});
+applyCfg();tick();setInterval(tick,1000);if(document.documentElement.className==='mode-app')startReplay();requestAnimationFrame(frame);
+})();
+</script>
+<script>
+(()=>{
+if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+if(document.documentElement.className==='mode-app')return;
+const $=id=>document.getElementById(id),ua=navigator.userAgent;
+const ios=/iphone|ipad|ipod/i.test(ua)||(/macintosh/i.test(ua)&&navigator.maxTouchPoints>1);
+const btn=$('getBtn');let ev=null;
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();ev=e;$('howAndroid').hidden=true});
+btn.onclick=async()=>{
+  if(ev){ev.prompt();const r=await ev.userChoice;ev=null;if(r.outcome==='accepted'){btn.disabled=true;btn.textContent='Installata';$('done').hidden=false}return}
+  const box=ios?$('howIos'):$('howAndroid');box.hidden=false;box.scrollIntoView({behavior:'smooth',block:'center'});
+};
+if(ios)$('howIos').hidden=false;
+addEventListener('appinstalled',()=>{btn.disabled=true;btn.textContent='Installata';$('done').hidden=false});
+// 5 tocchi sull'icona: apre il tracker nel browser (solo per te)
+let t=0,tm;$('stIcon').addEventListener('click',()=>{t++;clearTimeout(tm);tm=setTimeout(()=>t=0,1500);if(t>=5){try{sessionStorage.setItem('wtDev','1')}catch(e){}location.reload()}});
+// anteprime
+document.querySelectorAll('.shot canvas').forEach(c=>{const r=c.getBoundingClientRect(),d=devicePixelRatio||1;c.width=r.width*d;c.height=r.height*d;const x=c.getContext('2d');x.scale(d,d);const w=r.width,h=r.height,k=+c.dataset.s;
+  x.fillStyle='#0f2f42';x.fillRect(0,0,w,h);x.fillStyle='#0e2230';x.fillRect(0,0,w,h*.13);x.fillStyle='#7fd1d8';x.fillRect(8,h*.05,w*.5,4);
+  if(k===0){x.strokeStyle='rgba(219,231,236,.08)';for(let i=1;i<6;i++){x.beginPath();x.moveTo(0,h*i/6);x.lineTo(w,h*i/6);x.stroke();x.beginPath();x.moveTo(w*i/6,0);x.lineTo(w*i/6,h);x.stroke()}
+    x.strokeStyle='#f2b450';x.lineWidth=2;x.beginPath();for(let i=0;i<=60;i++){const px=w*.15+w*.65*i/60,py=h*.75-h*.45*i/60+12*Math.sin(i/6);i?x.lineTo(px,py):x.moveTo(px,py)}x.stroke();x.fillStyle='#f2b450';x.beginPath();x.arc(w*.8,h*.3+12*Math.sin(10),5,0,7);x.fill()}
+  if(k===1){x.fillStyle='rgba(127,209,216,.15)';x.strokeStyle='#7fd1d8';x.lineWidth=1.5;x.beginPath();x.moveTo(0,h*.25);for(let i=0;i<=80;i++){const px=w*i/80,ph=(i%27)/27,dd=ph<.8?Math.pow(Math.sin(Math.PI*ph/.8),.7):0;x.lineTo(px,h*.25+dd*h*.5)}x.lineTo(w,h*.25);x.fill();x.stroke()}
+  if(k===2){x.fillStyle='#1c3a4d';for(let i=0;i<7;i++){x.fillRect(10,h*.2+i*h*.1,w*.18,5);x.fillRect(10+w*.24,h*.2+i*h*.1,w*.6-((i*37)%30),5)}}
+});
+})();
+</script>
+</body>
+</html>

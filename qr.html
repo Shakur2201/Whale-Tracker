@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Whale Tracker · QR</title>
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<style>
+:root{--bg:#08161f;--panel:#0e2230;--ink:#dbe7ec;--mute:#7f9aa8;--amber:#f2b450;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,sans-serif;display:grid;place-items:center;padding:24px 16px}
+main{display:grid;gap:16px;justify-items:center;text-align:center;max-width:420px;width:100%}
+img.logo{width:72px;height:72px;border-radius:16px}
+h1{margin:0;font:700 30px "Arial Narrow",system-ui,sans-serif;letter-spacing:.01em}
+p{margin:0;color:var(--mute)}
+#qr{background:#fff;padding:16px;border-radius:14px;width:min(320px,100%)}
+#qr svg{display:block;width:100%;height:auto}
+code{font-size:13px;color:var(--amber);overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<main>
+  <img class="logo" src="icons/icon-192.png" alt="">
+  <h1>Whale Tracker</h1>
+  <p>Inquadra il codice con la fotocamera del telefono per aprire e installare l'app.</p>
+  <div id="qr"></div>
+  <code id="url"></code>
+</main>
+<script src="qrcode.js"></script>
+<script>
+const u=new URL('./',location.href).href;
+document.getElementById('url').textContent=u;
+const q=qrcode(0,'M');q.addData(u);q.make();
+document.getElementById('qr').innerHTML=q.createSvgTag({cellSize:8,margin:0,scalable:true});
+</script>
+</body>
+</html>
